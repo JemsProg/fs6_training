@@ -38,9 +38,12 @@ const Header = () => {
               <button className="rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
                 Register
               </button>
-              <button className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800">
+              <Link
+                to="/login"
+                className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+              >
                 Sign In
-              </button>
+              </Link>
             </div>
           </nav>
         </div>
