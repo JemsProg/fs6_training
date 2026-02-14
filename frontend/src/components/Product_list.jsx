@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Loading from "./Loading";
-import { useLocation } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
 import { BASE_URL } from "../api/base";
 
 const Product_list = () => {
-  const [products, SetProducts] = useState([]);
-  const [isLoading, SetLoading] = useState(true);
+  const [products, setProducts] = useState([]);
+  const [isLoading, setLoading] = useState(true);
   const location = useLocation().pathname;
 
   const ProductData = async () => {
     try {
       const response = await axios.get(`${BASE_URL}/products/`);
-      SetProducts(response.data);
-      SetLoading(false);
+      setProducts(response.data);
+      setLoading(false);
     } catch (err) {
       console.log(err);
     }
@@ -21,7 +21,7 @@ const Product_list = () => {
 
   useEffect(() => {
     ProductData();
-  });
+  }, []);
 
   if (isLoading) return <Loading />;
 
@@ -36,20 +36,22 @@ const Product_list = () => {
           {(location === "/" ? products.slice(0, 8) : products).map(
             (product) => (
               <div key={product.id} className="group relative">
-                <img
-                  alt={product.image}
-                  src={`${BASE_URL}${product.image}`}
-                  className="aspect-square w-full rounded-md bg-gray-200 object-cover group-hover:opacity-75 lg:aspect-auto lg:h-80"
-                />
+                <Link to={`/products/${product.id}`} className="block">
+                  <img
+                    alt={product.product_name}
+                    src={`${BASE_URL}${product.image}`}
+                    className="aspect-square w-full rounded-md bg-gray-200 object-cover group-hover:opacity-75 lg:aspect-auto lg:h-80"
+                  />
+                </Link>
                 <div className="mt-4 flex justify-between">
                   <div>
                     <h3 className="text-sm text-gray-700">
-                      <a href="#">
+                      <Link to={`/products/${product.id}`} className="hover:underline">
                         <span aria-hidden="true" className="absolute inset-0" />
                         {product.product_name}
-                      </a>
+                      </Link>
                     </h3>
-                    <p className="mt-1 text-sm text-gray-500">test</p>
+                    <p className="mt-1 text-sm text-gray-500">{product.brand}</p>
                   </div>
                   <p className="text-sm font-medium text-gray-900">
                     {product.product_price}
