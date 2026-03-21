@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import { AuthProvider } from "./context/AuthProvider";
 import { PrivateRoute } from "./context/PrivateRoute";
 import Product_Details from "./pages/Product_Details";
+import Cart from "./pages/Cart";
 
 function App() {
   return (
@@ -27,6 +28,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <Profile />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/cart"
+              element={
+                <PrivateRoute>
+                  <Cart />
                 </PrivateRoute>
               }
             />
