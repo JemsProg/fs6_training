@@ -61,6 +61,7 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "https://fs6-training-git-main-jemsprogs-projects.vercel.app",  
 ]
 
 ROOT_URLCONF = 'backend.urls'
