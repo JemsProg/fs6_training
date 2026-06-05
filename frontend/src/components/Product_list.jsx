@@ -35,7 +35,7 @@ const Product_list = () => {
         <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4 xl:gap-x-8">
           {(location === "/" ? products.slice(0, 8) : products).map(
             (product) => (
-              <Link to={`/product/${product.id}`} key={product.id}>
+              <Link to={`/products/${product.id}`} key={product.id}>
                 <div key={product.id} className="group relative">
                   <img
                     alt={product.image}
