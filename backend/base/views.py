@@ -202,6 +202,12 @@ def create_xendit_payment(request):
     user = request.user
     data = serializer.validated_data
 
+    if not user.email:
+        return Response(
+            {'error': 'Your account needs an email address before checkout.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     # Never trust the frontend total; compute the total from the cart.
     # select_related('product') also fetches product data in the same query.
     cart_items = cartUser.objects.filter(user=user).select_related('product')
