@@ -26,8 +26,14 @@ class paymentMethod(models.Model):
     totalPrice = models.DecimalField(max_digits=10, decimal_places=2)
     isPaid = models.BooleanField(default=False)
     paidAt = models.DateTimeField(null=True, blank=True)
-    paymongopayment = models.CharField(max_length=255)
-    paymongostatus = models.CharField(max_length=255)
+    # Xendit returns this ID after we create the hosted checkout invoice.
+    # We keep it so webhook events can be matched back to our local order.
+    xendit_invoice_id = models.CharField(max_length=255, blank=True, default='')
+    # external_id is our own unique reference sent to Xendit.
+    # It is safer for reconciliation because we control the value.
+    xendit_external_id = models.CharField(max_length=255, blank=True, default='', db_index=True)
+    # Store the latest Xendit status we have seen, such as PENDING, PAID, or EXPIRED.
+    xendit_status = models.CharField(max_length=50, blank=True, default='PENDING')
 
     def mark_paid(self):
         """Mark this payment as paid, create order items from the user's cart,

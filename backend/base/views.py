@@ -180,8 +180,10 @@ def delete_cart_item(request, pk):
 
 
 
-#Checkout and PayMongo Integration
-import base64
+# Checkout and Xendit Integration
+import uuid
+from decimal import Decimal
+from django.conf import settings
 from django.db import transaction
 import requests
 from .models import paymentMethod, shippingAddress
@@ -189,7 +191,7 @@ from .serializers import CheckoutSerializer
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def create_gcash_payment(request):
+def create_xendit_payment(request):
     # CheckoutSerializer validates the shipping fields from the frontend.
     serializer = CheckoutSerializer(data=request.data)
 
@@ -216,65 +218,78 @@ def create_gcash_payment(request):
         for item in cart_items
     )
 
-    # PayMongo secret key. Move this to an environment variable for production.
-    secret_key = 'sk_test_6Wu2UUWNZkq1KqyjxjFNEzvZ'
+    if not settings.XENDIT_SECRET_KEY:
+        # Do not continue without a secret key. A missing key should fail loudly
+        # instead of creating a local order that can never be paid.
+        return Response(
+            {'error': 'XENDIT_SECRET_KEY is not configured'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
-    # PayMongo uses Basic Auth, so the secret key must be base64 encoded.
-    encoded_key = base64.b64encode(f'{secret_key}:'.encode()).decode()
+    # Xendit hosted invoices use the currency amount, not PayMongo-style centavos.
+    # Convert through Decimal first so we do not accidentally send floating errors.
+    xendit_amount = float(Decimal(total_price).quantize(Decimal('0.01')))
 
-    # Headers describe the request we are sending to PayMongo.
-    headers = {
-        'Authorization': f'Basic {encoded_key}',
-        'Content-Type': 'application/json',
-    }
+    # external_id is our own unique reference. It lets us reconcile a webhook even
+    # if the gateway invoice ID is not the easiest field to query in a callback.
+    external_id = f'order-{user.id}-{uuid.uuid4().hex}'
 
-    # Payload is the JSON body PayMongo needs to create a checkout link.
-    # Amount is multiplied by 100 because PayMongo expects centavos, not pesos.
+    # Payload is the JSON body Xendit needs to create a hosted checkout page.
+    # Only the backend creates this; the frontend never sees the secret key.
     payload = {
-        'data': {
-            'attributes': {
-                'amount': int(total_price * 100),
-                'description': 'Order Payment',
-                'remarks': 'GCash only',
-                'redirect': {
-                    'success': 'http://localhost:5173/payment-success',
-                    'failed': 'http://localhost:3000/payment-failed',
-                },
-                'billing': {
-                    'name': data['fullName'],
-                    'email': user.email,
-                },
-                'payment_method_types': ['gcash'],
-            },
+        'external_id': external_id,
+        'amount': xendit_amount,
+        'currency': 'PHP',
+        'payer_email': user.email,
+        'description': 'Order Payment',
+        'success_redirect_url': settings.XENDIT_SUCCESS_REDIRECT_URL,
+        'failure_redirect_url': settings.XENDIT_FAILURE_REDIRECT_URL,
+        'customer': {
+            'given_names': data['fullName'],
+            'email': user.email,
+        },
+        'customer_notification_preference': {
+            'invoice_created': ['email'],
+            'invoice_paid': ['email'],
+            'invoice_expired': ['email'],
         },
     }
 
     try:
-        # Send the payment-link request to PayMongo.
-        paymongo_response = requests.post(
-            'https://api.paymongo.com/v1/links',
-            headers=headers,
+        # Xendit uses HTTP Basic Auth where the API key is the username and the
+        # password is blank. requests handles the base64 encoding for us.
+        xendit_response = requests.post(
+            'https://api.xendit.co/v2/invoices',
+            auth=(settings.XENDIT_SECRET_KEY, ''),
             json=payload,
             timeout=30,
         )
+        xendit_response.raise_for_status()
 
-        # Convert PayMongo's JSON response into a Python dictionary.
-        result = paymongo_response.json()
+        # Convert Xendit's JSON response into a Python dictionary.
+        result = xendit_response.json()
     except requests.RequestException as exc:
-        # This catches network errors, timeout errors, or PayMongo connection issues.
+        # This catches network errors, timeout errors, or Xendit API errors.
+        error_message = str(exc)
+        if getattr(exc, 'response', None) is not None:
+            try:
+                error_message = exc.response.json()
+            except ValueError:
+                error_message = exc.response.text
+
         return Response(
-            {'error': str(exc)},
+            {'error': error_message},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if 'data' not in result:
-        # If PayMongo did not return data, something went wrong.
+    if 'invoice_url' not in result or 'id' not in result:
+        # If Xendit did not return the fields we need, do not save a local order.
         return Response({'error': result}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Save important values from PayMongo's response.
-    checkout_url = result['data']['attributes']['checkout_url']
-    paymongo_id = result['data']['id']
-    paymongo_status = result['data']['attributes']['status']
+    # Save important values from Xendit's response.
+    checkout_url = result['invoice_url']
+    xendit_invoice_id = result['id']
+    xendit_status = result.get('status', 'PENDING')
 
     # transaction.atomic means both records must be saved together.
     # If one save fails, Django rolls back the other save too.
@@ -284,8 +299,9 @@ def create_gcash_payment(request):
             user=user,
             totalPrice=total_price,
             isPaid=False,
-            paymongopayment=paymongo_id,
-            paymongostatus=paymongo_status,
+            xendit_invoice_id=xendit_invoice_id,
+            xendit_external_id=external_id,
+            xendit_status=xendit_status,
         )
 
         # Store the shipping address connected to this payment.
@@ -298,7 +314,7 @@ def create_gcash_payment(request):
             country=data['country'],
         )
 
-    # Send the checkout link to the frontend so the user can pay with GCash.
+    # Send the checkout link to the frontend so the user can pay on Xendit's page.
     return Response({'checkout_url': checkout_url}, status=status.HTTP_200_OK)
 
 
@@ -307,47 +323,81 @@ import json
 
 @csrf_exempt
 @api_view(['POST'])
-def paymongo_webhook(request):
-    # A webhook is a request sent by PayMongo to our backend.
-    # csrf_exempt is used because PayMongo is not a browser with a CSRF token.
+def xendit_webhook(request):
+    # A webhook is a request sent by Xendit to our backend.
+    # csrf_exempt is used because Xendit is not a browser with a CSRF token.
     try:
+        callback_token = request.headers.get('x-callback-token')
+
+        if not settings.XENDIT_CALLBACK_TOKEN:
+            # Production should always configure this value in the environment.
+            # Without it, we cannot prove that the webhook came from Xendit.
+            return Response(
+                {'error': 'XENDIT_CALLBACK_TOKEN is not configured'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if callback_token != settings.XENDIT_CALLBACK_TOKEN:
+            # Never update orders from an unauthenticated webhook request.
+            return Response(
+                {'error': 'Invalid Xendit callback token'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # request.body is raw JSON bytes, so json.loads turns it into a dictionary.
         payload = json.loads(request.body)
 
-        # The event type tells us what happened in PayMongo.
-        event_type = payload.get('data', {}).get('attributes', {}).get('type')
+        # Xendit invoice callbacks include both a gateway invoice ID and our
+        # external_id. We try both so the handler is resilient to payload changes.
+        xendit_invoice_id = payload.get('id')
+        xendit_external_id = payload.get('external_id')
+        xendit_status = payload.get('status')
 
-        if event_type != 'link.payment.paid':
-            # We only process paid events. Other events are accepted but ignored.
+        if not xendit_invoice_id and not xendit_external_id:
             return Response(
-                {'message': 'Event received'},
-                status=status.HTTP_200_OK,
+                {'error': 'Missing Xendit invoice reference'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # This is the PayMongo payment/link id that we saved earlier.
-        paymongo_id = payload['data']['attributes']['data']['id']
-
-        # Find our payment record using the PayMongo id.
-        payment = paymentMethod.objects.filter(
-            paymongopayment=paymongo_id,
-        ).first()
+        # Find our payment record using the Xendit id or our own external id.
+        payment = None
+        if xendit_invoice_id:
+            payment = paymentMethod.objects.filter(
+                xendit_invoice_id=xendit_invoice_id,
+            ).first()
+        if not payment and xendit_external_id:
+            payment = paymentMethod.objects.filter(
+                xendit_external_id=xendit_external_id,
+            ).first()
 
         if not payment:
-            # This means PayMongo paid event arrived, but our database has no match.
+            # This means Xendit sent an event, but our database has no match.
             return Response(
                 {'message': 'Payment not found'},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Keep the latest gateway status for support and reconciliation.
+        if xendit_status:
+            payment.xendit_status = xendit_status
+            payment.save(update_fields=['xendit_status'])
+
+        if xendit_status not in ['PAID', 'SETTLED']:
+            # We only fulfill paid events. Other events are accepted after status
+            # storage so Xendit does not keep retrying valid non-paid updates.
+            return Response(
+                {'message': 'Xendit event received'},
+                status=status.HTTP_200_OK,
+            )
+
         if payment.isPaid:
-            # This prevents duplicate order items if PayMongo sends the webhook twice.
+            # This prevents duplicate order items if Xendit sends the webhook twice.
             return Response(
                 {'message': 'Already processed'},
                 status=status.HTTP_200_OK,
             )
 
         # mark_paid updates the payment, creates order items, and clears the cart.
-        payment.paymongostatus = 'paid'
         payment.mark_paid()
 
         return Response(

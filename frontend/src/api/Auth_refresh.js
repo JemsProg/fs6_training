@@ -3,7 +3,7 @@ import { BASE_URL } from "./base";
 
 // authRequest is a reusable helper for API calls that need login.
 // Instead of writing axios and Authorization headers in every page,
-// we call authRequest("get", "/cart/") or authRequest("post", "/checkout/gcash/", data).
+// we call authRequest("get", "/cart/") or authRequest("post", "/checkout/xendit/", data).
 export const authRequest = async (method, url, data = null) => {
   try {
     // First attempt: send the request using the current access token.

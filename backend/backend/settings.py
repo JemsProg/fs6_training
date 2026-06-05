@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -41,6 +42,8 @@ INSTALLED_APPS = [
     'rest_framework',
     "corsheaders",
 ]
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -125,6 +128,19 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 STATIC_URL = 'static/'
+
+# Xendit payment gateway settings.
+# Keep real values in environment variables, never in Git or frontend code.
+XENDIT_SECRET_KEY = "xnd_development_EGpYCOY8lSa4lYuiAsBDgmDtCPRcPPTeKkEqY3Lpr1VVJYJLV5P9HaoaHu0nm"
+XENDIT_CALLBACK_TOKEN = "JUguIalSn3y3UrCanwaHkOFPCPOQ7o3k1RJN4QeAFxMTTTAh"
+XENDIT_SUCCESS_REDIRECT_URL = os.environ.get(
+    'XENDIT_SUCCESS_REDIRECT_URL',
+    'http://localhost:5173/payment-success',
+)
+XENDIT_FAILURE_REDIRECT_URL = os.environ.get(
+    'XENDIT_FAILURE_REDIRECT_URL',
+    'http://localhost:5173/payment-failed',
+)
 MEDIA_URL = '/images/'
 MEDIA_ROOT = 'static/images'
 

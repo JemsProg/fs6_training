@@ -117,8 +117,9 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             'totalPrice',
             'isPaid',
             'paidAt',
-            'paymongopayment',
-            'paymongostatus',
+            'xendit_invoice_id',
+            'xendit_external_id',
+            'xendit_status',
             'items',
             'shipping',
         ]

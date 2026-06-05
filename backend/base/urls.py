@@ -9,8 +9,8 @@ from .views import (
     update_cart_item,
     delete_cart_item,
     cart_view,
-    create_gcash_payment,
-    paymongo_webhook,
+    create_xendit_payment,
+    xendit_webhook,
     list_user_orders,
 )
 
@@ -36,8 +36,8 @@ urlpatterns = [
     path('cart/', cart_view, name='cart_view'),
 
     # Payment
-    path('checkout/gcash/', create_gcash_payment, name='create_gcash_payment'),
-    path('webhook/paymongo/', paymongo_webhook, name='paymongo_webhook'),
+    path('checkout/xendit/', create_xendit_payment, name='create_xendit_payment'),
+    path('webhook/xendit/', xendit_webhook, name='xendit_webhook'),
 
     # Orders
     path('orders/', list_user_orders, name='orders'),

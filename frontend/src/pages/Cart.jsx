@@ -27,13 +27,13 @@ export default function Cart() {
     try {
       // Send the shipping form data to the backend checkout endpoint.
       // authRequest is used because checkout requires the user to be logged in.
-      const res = await authRequest("post", "/checkout/gcash/", shipping);
+      const res = await authRequest("post", "/checkout/xendit/", shipping);
 
-      // The backend returns a PayMongo checkout link.
+      // The backend returns a Xendit hosted checkout link.
       const checkoutUrl = res.data.checkout_url;
 
       if (checkoutUrl) {
-        // Redirect the browser to PayMongo so the user can pay with GCash.
+        // Redirect the browser to Xendit so the user can complete payment.
         window.location.href = checkoutUrl;
       }
     } catch (error) {
