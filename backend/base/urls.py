@@ -21,7 +21,7 @@ from rest_framework_simplejwt.views import (
 
 urlpatterns = [
     path('products/', product_list, name="product_list"),
-    path('products/<int:pk>/', get_product_data, name="product_data"),
+    path('product/<int:pk>/', get_product_data, name="product_data"),
 
     path('register/', register_user, name='register'),
     # login function
